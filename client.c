@@ -46,12 +46,23 @@ int main(int argc, char *argv[]){
          return  EXIT_FAILURE;
     }
     
-    int ret=connect(sock_fd, (struct sockaddr *)&serv_addr,sizeof(serv_addr));
-    if(ret==-1){
-        fprintf(stderr, "\nError: %s\n",strerror(errno));
-        return  EXIT_FAILURE;
+    if((connect(sock_fd, (struct sockaddr *)&serv_addr,sizeof(serv_addr)))==-1){
+        perror("\n[-]Connectin error!\n");
+        exit(EXIT_FAILURE);
     }
-    printf("\n[+]Connected to the server!\n");
+    //Try to get the peer address
+    struct sockaddr_storage ss;
+    socklen_t len;
+    len=sizeof(ss);
+    if((getpeername(sock_fd, (struct sockaddr *)&ss,&len))==-1){
+        perror("[-]Error getpeername");
+        exit(EXIT_FAILURE);
+    }
+    struct sockaddr_in *peer=(struct sockaddr_in *) &ss;
+    char ip[INET_ADDRSTRLEN];
+
+    inet_ntop(AF_INET,&peer->sin_addr,ip,sizeof(ip));
+    printf("\n[+]Connected to server IP: %s  port: %d\n",ip,ntohs(peer->sin_port));
     //We now attempt to read  from the file descriptor
     while((n=read(sock_fd,recvbf,sizeof(recvbf)-1))>0){
         recvbf[n]=0;

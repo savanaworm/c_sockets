@@ -87,10 +87,11 @@ void socket_handler(server_addr *s,client_addr *c){
         if((pid=fork())==0){
             close(listen_fd);
             printf("\nThis is the child running with the PID: %d\n",getpid());
+            printf("Enter message to send to client: ");
             fgets(buffer,1024-1,stdin);
             size_t size = strlen(buffer);
             send(conn_fd,buffer,size,0);
-            sleep(1);
+            
             char rbuff[BUFSIZE];
             if((recv(conn_fd,rbuff,size,0))==-1){
                 perror("\nRecv\n");

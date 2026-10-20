@@ -1,5 +1,7 @@
 #include <arpa/inet.h>
+#include <sys/wait.h>
 #include <netinet/in.h>
+#include <signal.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -7,40 +9,47 @@
 #include <sys/socket.h>
 #include <stdio.h>
 #include <string.h>
-//#include <signal.h>
-
-#define LISTENQ 1024
-#define BUFSIZE 1024
-#define PORT 5000
-
-//We are trying to pass the socket struct by reference to avoid copying the whole struct to the function
-typedef struct sockaddr_in server_addr,client_addr;
-
-//volatile sig_atomic_t keep_running=1;
+#include "header.h"
 
 
-//function prototype
-void socket_handler(server_addr *s,client_addr *c);
-/*
-void signint_handler(int sig_num){
-    printf("\nOooouch!Are you trying to kill me :(\nCtrl-C detected ....Terminating execution!\n");
-    keep_running=0;
-    exit(EXIT_FAILURE);
-}
-*/
 
 int main(int argc, char *argv[])
 {
     printf("Welcome to my test server\nThis is how to use the server\nYou can use Ctrl-C to terminate the server\n");
     server_addr s;
     client_addr c;
-    //Cregister the signal signint_handler
-    //signal(SIGINT,signint_handler);
-    /*while(keep_running){
-        socket_handler(&s, &c);
-    }*/ 
     socket_handler(&s, &c);
     return EXIT_SUCCESS;
+}
+
+Sigfunc *Signal(int signo,Sigfunc *func){
+ 
+    struct sigaction act,oact;
+    act.sa_handler=func;
+    sigemptyset(&act.sa_mask);
+    act.sa_flags=0;
+    if(signo==SIGALRM){
+#ifdef SA_RESTART
+        act.sa_flags &=~SA_RESTART;
+#endif /* ifdef MACRO */
+    }else{
+#ifdef SA_RESTART
+        act.sa_flags |=SA_RESTART;
+#endif
+    }
+    if((sigaction(signo,&act,&oact))<0){
+        return (SIG_ERR);
+    }
+    return(oact.sa_handler);
+}
+
+void sig_child(int signo){
+    pid_t pid;
+    int stat;
+
+    pid= wait(&stat);
+    printf("\n[+]Child has been terminated PID: %d\n",pid);
+    return;
 }
 
 
@@ -76,6 +85,7 @@ void socket_handler(server_addr *s,client_addr *c){
         perror("\nListen!\n");
         exit(EXIT_FAILURE);
     }
+    Signal(SIGCHLD,sig_child);
     socklen_t client_len;
     while(1){
         pid_t pid;
@@ -87,20 +97,24 @@ void socket_handler(server_addr *s,client_addr *c){
         if((pid=fork())==0){
             close(listen_fd);
             printf("\nThis is the child running with the PID: %d\n",getpid());
-            printf("Enter message to send to client: ");
-            fgets(buffer,1024-1,stdin);
-            size_t size = strlen(buffer);
-            send(conn_fd,buffer,size,0);
             
             char rbuff[BUFSIZE];
-            if((recv(conn_fd,rbuff,size,0))==-1){
+            size_t r=recv(conn_fd, rbuff, sizeof(rbuff)-1,0);
+            if(r==-1){
                 perror("\nRecv\n");
                 exit(EXIT_FAILURE);
             }
-            printf("Message from client: %s",rbuff);
-            exit(EXIT_SUCCESS);
+            if(r==0){
+                printf("\n[+]Clinet closed connection\n");
+                exit(EXIT_FAILURE);
+            }else{
+                rbuff[r]='\0';
+                printf("\nMessage from client: %s\n",rbuff);
+                exit(EXIT_SUCCESS);
+            }
+
         }
-        printf("\nParent pid: %d",getpid());
+        printf("\nParent pid: %d\n",getpid());
         close(conn_fd);
     }
 

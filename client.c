@@ -79,8 +79,18 @@ int main(int argc, char *argv[]){
             perror("\nSend error\n");
             exit(EXIT_FAILURE);
         }
-
-
+        char rbuff[BUFSIZE];
+        size_t r =recv(sock_fd,rbuff,sizeof(rbuff)-1, 0);
+        if(r==-1){
+            perror("\nRecv\n");
+            exit(EXIT_FAILURE);
+        }else if(r==0){
+            printf("\n[+]Server not reacheble\n");
+            exit(EXIT_FAILURE);
+        }else{
+            rbuff[r]='\0';
+            printf("\n[+]Echo from server: %s\n",rbuff);
+        }
     }
 
     return EXIT_SUCCESS;

@@ -47,8 +47,10 @@ void sig_child(int signo){
     pid_t pid;
     int stat;
 
-    pid= wait(&stat);
-    printf("\n[+]Child has been terminated PID: %d\n",pid);
+    if((wait(&stat))==-1){
+        perror("\nWait\n");
+        exit(EXIT_FAILURE);
+    }
     return;
 }
 
@@ -63,7 +65,6 @@ void socket_handler(server_addr *s,client_addr *c){
         perror("\nListen!\n");
         exit(EXIT_FAILURE);
     }
-
     //Fill the struct with 0 and the buffer too
     memset(s,0 , sizeof(*s));
     memset(buffer, 0, sizeof(buffer));
@@ -97,20 +98,28 @@ void socket_handler(server_addr *s,client_addr *c){
         if((pid=fork())==0){
             close(listen_fd);
             printf("\nThis is the child running with the PID: %d\n",getpid());
-            
-            char rbuff[BUFSIZE];
-            size_t r=recv(conn_fd, rbuff, sizeof(rbuff)-1,0);
-            if(r==-1){
-                perror("\nRecv\n");
-                exit(EXIT_FAILURE);
-            }
-            if(r==0){
-                printf("\n[+]Clinet closed connection\n");
-                exit(EXIT_FAILURE);
-            }else{
-                rbuff[r]='\0';
-                printf("\nMessage from client: %s\n",rbuff);
-                exit(EXIT_SUCCESS);
+            here:
+                char rbuff[BUFSIZE];
+                size_t r=recv(conn_fd, rbuff, sizeof(rbuff)-1,0);
+                if(r==-1){
+                    perror("\nRecv\n");
+                    exit(EXIT_FAILURE);
+                }
+                if(r==0){
+                    printf("\n[+]Client closed connection\n");
+                    exit(EXIT_FAILURE);
+                }else{
+                    rbuff[r]='\0';
+//                  printf("\nMessage from client: %s\n",rbuff);
+                    //we echo back to client 
+                    if((send(conn_fd,rbuff,r,0))==-1){
+                        perror("\nSend");
+                        exit(EXIT_FAILURE);
+                    }else{
+                          goto here;
+                    }
+                //exit(EXIT_SUCCESS);
+
             }
 
         }

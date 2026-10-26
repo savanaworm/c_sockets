@@ -45,11 +45,41 @@ void sig_child(int signo){
             if (WIFEXITED(status)) {
                 printf("\nChild exited successfully with status %d\n",WEXITSTATUS(status));
                 break;
+            }else if (WIFSIGNALED(status)) {
+                printf("\n[+]Child killed by signal: %d\n",WTERMSIG(status));
+                break;
             }else{
                 perror("\nChild exit error\n");
+                _exit(status);
             }
     }
 }
+void str_echo(int conn_fd){
+    for(;;){
+        char rbuff [BUFSIZE];
+        struct args args;
+        struct result result;
+        memset(rbuff,0,sizeof(rbuff));
+        size_t r=recv(conn_fd, rbuff, sizeof(rbuff),0);
+        if(r==-1){
+            perror("\n[+]Recv error\n");
+            _exit(EXIT_FAILURE);
+        }
+        if(r==0){
+            printf("\n[+]Client closed connection\n");
+            _exit(EXIT_SUCCESS);
+        }
+        rbuff[r]='\0';
+        printf("\n[+]Message from client: %s\n",rbuff);                    //we echo back to client 
+        if((send(conn_fd,rbuff,r,0))==-1){
+            perror("\n[+]Send error!\n");
+            _exit(EXIT_FAILURE);
+        }
+        memset(rbuff,0,sizeof(rbuff));
+    }
+    return;
+}
+
 void socket_handler(server_addr *s,client_addr *c){
     
     char buffer[BUFSIZE];
@@ -65,9 +95,10 @@ void socket_handler(server_addr *s,client_addr *c){
     memset(buffer, 0, sizeof(buffer));
 
     //Setup struct  values by reference
-    s->sin_family=AF_INET;
-    s->sin_port=htons(PORT);
-    s->sin_addr.s_addr=htonl(INADDR_LOOPBACK);
+    //This is basically equal to s->fields...just testing things out:)
+    (*s).sin_family=AF_INET;
+    (*s).sin_port=htons(PORT);
+    (*s).sin_addr.s_addr=htonl(INADDR_LOOPBACK);
 
     //Bind socket file descriptor to address 
     if(bind(listen_fd,(struct sockaddr *)s,sizeof(*s))<0){
@@ -103,27 +134,9 @@ void socket_handler(server_addr *s,client_addr *c){
         if(pid==0){
             close(listen_fd);
             printf("\nThis is the child running with the PID: %d\n",getpid());
-            for(;;){
-                char rbuff [BUFSIZE];
-                memset(rbuff,0,sizeof(rbuff));
-                size_t r=recv(conn_fd, rbuff, sizeof(rbuff)-1,0);
-                if(r==-1){
-                    perror("\n[+]Recv error\n");
-                    _exit(EXIT_FAILURE);
-                }
-                if(r==0){
-                    printf("\n[+]Client closed connection\n");
-                    _exit(EXIT_SUCCESS);
-                }
-                rbuff[r]='\0';
-                printf("\n[+]Message from client: %s\n",rbuff);                    //we echo back to client 
-                if((send(conn_fd,rbuff,r,0))==-1){
-                    perror("\n[+]Send error!\n");
-                    _exit(EXIT_FAILURE);
-                }
-                memset(rbuff,0,sizeof(rbuff));
-            }
+            str_echo(conn_fd);
         }
+
 
     }
     printf("\nPID: %d\n",getpid());

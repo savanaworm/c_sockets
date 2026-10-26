@@ -1,4 +1,7 @@
 #include <arpa/inet.h>
+#include <asm-generic/errno-base.h>
+#include <errno.h>
+#include <strings.h>
 #include <sys/wait.h>
 #include <netinet/in.h>
 #include <signal.h>
@@ -27,16 +30,7 @@ Sigfunc *Signal(int signo,Sigfunc *func){
     struct sigaction act,oact;
     act.sa_handler=func;
     sigemptyset(&act.sa_mask);
-    act.sa_flags=0;
-    if(signo==SIGALRM){
-#ifdef SA_RESTART
-        act.sa_flags &=~SA_RESTART;
-#endif /* ifdef MACRO */
-    }else{
-#ifdef SA_RESTART
-        act.sa_flags |=SA_RESTART;
-#endif
-    }
+    act.sa_flags=SA_NOCLDSTOP;
     if((sigaction(signo,&act,&oact))<0){
         return (SIG_ERR);
     }
@@ -45,16 +39,17 @@ Sigfunc *Signal(int signo,Sigfunc *func){
 
 void sig_child(int signo){
     pid_t pid;
-    int stat;
+    int status;
 
-    if((wait(&stat))==-1){
-        perror("\nWait\n");
-        exit(EXIT_FAILURE);
+    while ((pid=waitpid(-1,&status,WNOHANG))!=-1) {
+            if (WIFEXITED(status)) {
+                printf("\nChild exited successfully with status %d\n",WEXITSTATUS(status));
+                break;
+            }else{
+                perror("\nChild exit error\n");
+            }
     }
-    return;
 }
-
-
 void socket_handler(server_addr *s,client_addr *c){
     
     char buffer[BUFSIZE];
@@ -86,47 +81,54 @@ void socket_handler(server_addr *s,client_addr *c){
         perror("\nListen!\n");
         exit(EXIT_FAILURE);
     }
-    Signal(SIGCHLD,sig_child);
+    signal(SIGCHLD,sig_child);
     socklen_t client_len;
-    while(1){
+    for(;;){
         pid_t pid;
         client_len=sizeof(*c);
         if((conn_fd=accept(listen_fd, (struct sockaddr *)c, &client_len))<0){
-                perror("\nAccept!\n");
+            if (errno==EINTR) {
+                continue;
+            }else {
+                perror("\n[+]Accept error\n");
                 exit(EXIT_FAILURE);
-                }
-        if((pid=fork())==0){
+            }
+        }
+        if((pid=fork())<0){
+            perror("\nFork error\n");
+            close(conn_fd);
+            continue;
+        }
+
+        if(pid==0){
             close(listen_fd);
             printf("\nThis is the child running with the PID: %d\n",getpid());
-            here:
-                char rbuff[BUFSIZE];
+            for(;;){
+                char rbuff [BUFSIZE];
+                memset(rbuff,0,sizeof(rbuff));
                 size_t r=recv(conn_fd, rbuff, sizeof(rbuff)-1,0);
                 if(r==-1){
-                    perror("\nRecv\n");
-                    exit(EXIT_FAILURE);
+                    perror("\n[+]Recv error\n");
+                    _exit(EXIT_FAILURE);
                 }
                 if(r==0){
                     printf("\n[+]Client closed connection\n");
-                    exit(EXIT_FAILURE);
-                }else{
-                    rbuff[r]='\0';
-//                  printf("\nMessage from client: %s\n",rbuff);
-                    //we echo back to client 
-                    if((send(conn_fd,rbuff,r,0))==-1){
-                        perror("\nSend");
-                        exit(EXIT_FAILURE);
-                    }else{
-                          goto here;
-                    }
-                //exit(EXIT_SUCCESS);
-
+                    _exit(EXIT_SUCCESS);
+                }
+                rbuff[r]='\0';
+                printf("\n[+]Message from client: %s\n",rbuff);                    //we echo back to client 
+                if((send(conn_fd,rbuff,r,0))==-1){
+                    perror("\n[+]Send error!\n");
+                    _exit(EXIT_FAILURE);
+                }
+                memset(rbuff,0,sizeof(rbuff));
             }
-
         }
-        printf("\nParent pid: %d\n",getpid());
-        close(conn_fd);
-    }
 
-    return;
+    }
+    printf("\nPID: %d\n",getpid());
+    printf("\n[+]Closing connection file descriptor!\n");
+    close(conn_fd);
+        
 }
 

@@ -7,7 +7,7 @@ typedef void Sigfunc(int);
 typedef struct sockaddr_in server_addr;
 typedef struct sockaddr_in client_addr;
 
-//Function prototypes
+//FUnction prototypes
 void socket_handler(server_addr *s,client_addr *c);
 void sig_child(int signo);
 Sigfunc *Signal(int signo,Sigfunc *func);
